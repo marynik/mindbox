@@ -1,0 +1,21 @@
+# в 7:00 на день увеличиваем число реплик до 4
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scale-up-my-web-app
+spec:
+  schedule: "0 7 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: scaler
+              image: bitnami/kubectl
+              command:
+                - kubectl
+                - scale
+                - deployment
+                - my-web-app
+                - --replicas=4
+          restartPolicy: OnFailure

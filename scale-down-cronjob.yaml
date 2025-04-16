@@ -1,0 +1,21 @@
+# в 23:00 на ночь уменьшаем число реплик до 2
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scale-down-my-web-app
+spec:
+  schedule: "0 23 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: scaler
+              image: bitnami/kubectl
+              command:
+                - kubectl
+                - scale
+                - deployment
+                - my-web-app
+                - --replicas=2
+          restartPolicy: OnFailure
