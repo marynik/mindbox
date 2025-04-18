@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -83,3 +84,127 @@ spec:
 # здесь будет эффективнее по ресурсам
 # - если снимаются метрики, можно попробовать по ним сделать масштабирование,
 # исходя, например, из количества запросов - это позволит уменьшить затраты на ресурсы
+
+---
+# обеспечиваем минимальное число подов в работе - 2
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web-app-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: web-app
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-web-app-service
+spec:
+  selector:
+    app: web-app
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-web-app-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: my-app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-web-app-service
+                port:
+                  number: 80
+
+---
+# в 23:00 на ночь уменьшаем число реплик до 2
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scale-down-my-web-app
+spec:
+  schedule: "0 23 * * *"
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 60
+      template:
+        spec:
+          serviceAccountName: cronjob-sa
+          containers:
+            - name: scaler
+              image: bitnami/kubectl
+              command:
+                - kubectl
+                - scale
+                - deployment
+                - web-app
+                - --replicas=2
+          restartPolicy: OnFailure
+---
+# в 7:00 на день увеличиваем число реплик до 4
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scale-up-my-web-app
+spec:
+  schedule: "0 7 * * *"
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 60
+      template:
+        spec:
+          serviceAccountName: cronjob-sa
+          containers:
+            - name: scaler
+              image: bitnami/kubectl
+              command:
+                - kubectl
+                - scale
+                - deployment
+                - web-app
+                - --replicas=4
+          restartPolicy: OnFailure
+---
+# сервис-аккаунт с правами для cronjob
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cronjob-sa
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cronjob-role
+  namespace: default
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cronjob-rolebinding
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: cronjob-sa
+    namespace: default
+roleRef:
+  kind: Role
+  name: cronjob-role
+  apiGroup: rbac.authorization.k8s.io
+---

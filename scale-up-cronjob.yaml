@@ -1,4 +1,3 @@
-# в 7:00 на день увеличиваем число реплик до 4
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -7,8 +6,10 @@ spec:
   schedule: "0 7 * * *"
   jobTemplate:
     spec:
+      ttlSecondsAfterFinished: 60
       template:
         spec:
+          serviceAccountName: cronjob-sa
           containers:
             - name: scaler
               image: bitnami/kubectl
@@ -16,6 +17,6 @@ spec:
                 - kubectl
                 - scale
                 - deployment
-                - my-web-app
+                - web-app
                 - --replicas=4
           restartPolicy: OnFailure
